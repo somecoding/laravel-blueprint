@@ -1,0 +1,47 @@
+# Setup
+.env
+.env.auth
+.env.backup
+docker-compose.override.yml
+supervisord.pid
+
+# Frontend
+/node_modules
+/public/hot
+/public/build
+npm-debug.log
+yarn-error.log
+*.local
+.yalc
+yalc.lock
+
+
+# Backend
+/public/storage
+/storage/*.key
+/vendor
+.phpunit.result.cache
+.deptrac.cache
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# vapor
+.vapor/
+
+#xdebug
+xdebug_profile/
+jest.results.json
+
+/coverage
+
+
+.data/
+vendor/
+
+*.sql
+*.zip

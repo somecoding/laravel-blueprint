@@ -1,0 +1,177 @@
+
+services:
+  nginx:
+    build: ./docker/nginx
+    restart: unless-stopped
+    depends_on:
+      - php-fpm
+    volumes:
+      - ./public:/var/www/html/public:delegated
+      - ./docker/nginx/site.conf:/etc/nginx/conf.d/default.conf:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${CONTAINER_NAME}-nginx.rule=Host(`${CONTAINER_NAME}.local`) || Host(`${CONTAINER_NAME}.testing`)"
+      - "traefik.http.routers.${CONTAINER_NAME}-nginx.entrypoints=web,websecure"
+      - "traefik.docker.network=traefik"
+    networks:
+      - traefik
+      - default
+   # ports:
+   #   - "8091:80"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+
+  php-fpm:
+    #container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+      args:
+        GITHUB_TOKEN: $GITHUB_TOKEN
+        GROUP_ID: $GROUP_ID
+        USER_ID: $USER_ID
+    environment:
+      PHP_IDE_CONFIG: 'serverName=${CONTAINER_NAME}.local'
+      XDEBUG_CONFIG: client_host=${MY_IP}
+    image: somecoding/${CONTAINER_NAME}-php-fpm
+    volumes:
+      - .:/var/www/html:delegated
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/php.ini
+      - ./docker/php/docker-php-ext-xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+      - ./docker/php/fpm_additional.conf:/usr/local/etc/php-fpm.d/zzzz-fpm_additional.conf # zzzz- to be loaded last: overwrites all before
+      - ./xdebug_profile:/tmp/profile:delegated
+    depends_on:
+      - sql
+      - cache
+    networks:
+      - traefik
+      - default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+
+
+  php-queue:
+    build:
+      context: ./docker/php-queue
+      dockerfile: Dockerfile
+      args:
+        GITHUB_TOKEN: $GITHUB_TOKEN
+        GROUP_ID: $GROUP_ID
+        USER_ID: $USER_ID
+        FPM_BASE: somecoding/${CONTAINER_NAME}-php-fpm
+    deploy:
+      replicas: '${WORKER_QUEUE}'
+    environment:
+      TELESCOPE_ENABLED: false
+    volumes:
+      - .:/var/www/html:delegated
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/php.ini
+    depends_on:
+      - sql
+      - php-fpm
+      - cache
+    restart: unless-stopped
+    networks:
+      - traefik
+      - default
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+  php-queue-background:
+      build:
+        context: ./docker/php-queue-background
+        dockerfile: Dockerfile
+        args:
+          GITHUB_TOKEN: $GITHUB_TOKEN
+          GROUP_ID: $GROUP_ID
+          USER_ID: $USER_ID
+          FPM_BASE: somecoding/${CONTAINER_NAME}-php-fpm
+      deploy:
+        replicas: '${WORKER_QUEUE_BACKGROUND}'
+      environment:
+        TELESCOPE_ENABLED: false
+      volumes:
+        - .:/var/www/html:delegated
+        - ./docker/php/php.ini:/usr/local/etc/php/conf.d/php.ini
+      depends_on:
+        - sql
+        - php-fpm
+        - cache
+      restart: unless-stopped
+      networks:
+        - traefik
+        - default
+      logging:
+        driver: "json-file"
+        options:
+          max-size: "5m"
+          max-file: "3"
+  cache:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --save 43200 1 --save 21600 100 --loglevel warning
+    environment:
+      - REDIS_ARGS=--save 43200 1 --save 21600 100
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli --raw info persistence | grep '^loading:0'" ]
+      start_period: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 60
+    volumes:
+    - redis:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+  sql:
+    image: mariadb:12.0.2-ubi
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: '${DB_PASSWORD}'
+      MARIADB_DATABASE: '${DB_DATABASE}'
+      MARIADB_USER: '${DB_USERNAME}'
+      MARIADB_PASSWORD: '${DB_PASSWORD}'
+      MARIADB_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+      - mariadb:/var/lib/mysql
+    #ports:
+      #- "33500:3306"
+    healthcheck:
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: mysqld --sql-mode=NO_ENGINE_SUBSTITUTION
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+
+
+networks:
+  traefik:
+    external: true
+    name: traefik
+
+volumes:
+  redis:
+  mariadb:
+  elasticsearch:

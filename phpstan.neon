@@ -1,0 +1,16 @@
+includes:
+    - phpstan-baseline.neon
+    - vendor/nunomaduro/larastan/extension.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-mockery/extension.neon
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-phpunit/rules.neon
+
+parameters:
+    level: max
+    paths:
+        - app
+        - tests
+    ignoreErrors:
+        - '#Dynamic call to static method PHPUnit\\Framework\\.*#'
